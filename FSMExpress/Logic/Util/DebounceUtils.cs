@@ -3,7 +3,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace FSMExpress.Util;
+namespace FSMExpress.Logic.Util;
+
 public static class DebounceUtils
 {
     public static Action<T> Debounce<T>(Action<T> func, int milliseconds = 300)
@@ -20,10 +21,7 @@ public static class DebounceUtils
                 {
                     if (t.IsCompletedSuccessfully)
                     {
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            func(arg);
-                        });
+                        Dispatcher.UIThread.Post(() => func(arg));
                     }
                 }, TaskScheduler.Default);
         };

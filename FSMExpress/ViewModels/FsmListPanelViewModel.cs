@@ -1,19 +1,17 @@
-﻿using AssetsTools.NET;
+using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FSMExpress.Common.Assets;
 using FSMExpress.Logic.Util;
-using FSMExpress.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 
-// todo: this needs to be genericized
+namespace FSMExpress.ViewModels;
 
-namespace FSMExpress.ViewModels.Dialogs;
-public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelectorListEntry>
+public partial class FsmListPanelViewModel : ViewModelBase
 {
     // Search modes for FSM entries
     public enum FsmSearchMode
@@ -24,57 +22,44 @@ public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelec
         EndsWith
     }
 
-    // Sort modes for FSM entries
-    public enum FsmSortMode
-    {
-        Default,
-        Alphabetical
-    }
-
     [ObservableProperty]
     private string _searchText = "";
     [ObservableProperty]
     private FsmSearchMode _searchMode = FsmSearchMode.Contains;
     [ObservableProperty]
-    private FsmSortMode _sortMode = FsmSortMode.Default;
+    private FsmSelectorListEntry? _selectedEntry;
     [ObservableProperty]
-    private bool _sortAscending = true;
+    private ObservableCollection<FsmSelectorListEntry> _entries;
     [ObservableProperty]
-    public FsmSelectorListEntry? _selectedEntry;
+    private ObservableCollection<FsmSearchMode> _searchModes;
     [ObservableProperty]
-    private RangeObservableCollection<FsmSelectorListEntry> _entries = [];
+    private ObservableCollection<FsmSelectorListEntry> _fsmList = new();
 
     private List<FsmSelectorListEntry> _internalEntries = [];
-
     private readonly AssetsManager _manager;
     private readonly AssetsFileInstance _fileInst;
     private readonly Action<string> _searchDb;
 
-    public string Title => "FSM Selector";
-    public int Width => 350;
-    public int Height => 450;
-    public event Action<FsmSelectorListEntry?>? RequestClose;
-
-    public Task AsyncInit() => FillFsmEntries();
-
-    public FsmSelectorViewModel(AssetsManager manager, AssetsFileInstance fileInst)
+    public FsmListPanelViewModel(AssetsManager manager, AssetsFileInstance fileInst)
     {
         _manager = manager;
         _fileInst = fileInst;
         _searchDb = DebounceUtils.Debounce<string>(FilterEntries, 300);
+
+        // Initialize collections
+        _entries = new ObservableCollection<FsmSelectorListEntry>();
+        _searchModes = new ObservableCollection<FsmSearchMode>(Enum.GetValues<FsmSearchMode>());
     }
 
     // Handlers for property changes
     partial void OnSearchTextChanged(string value) => _searchDb(value);
     partial void OnSearchModeChanged(FsmSearchMode value) => _searchDb(SearchText);
-    partial void OnSortModeChanged(FsmSortMode value) => _searchDb(SearchText);
-    partial void OnSortAscendingChanged(bool value) => _searchDb(SearchText);
 
     private void FilterEntries(string searchText)
     {
         Entries.Clear();
         
-        // First apply search filtering
+        // Apply search filtering
         var filtered = _internalEntries.AsEnumerable();
         if (!string.IsNullOrEmpty(searchText))
         {
@@ -88,15 +73,10 @@ public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelec
             };
         }
 
-        // Then apply sorting
-        if (SortMode == FsmSortMode.Alphabetical)
+        foreach (var entry in filtered)
         {
-            filtered = SortAscending 
-                ? filtered.OrderBy(e => e.Name) 
-                : filtered.OrderByDescending(e => e.Name);
+            Entries.Add(entry);
         }
-
-        Entries.AddRange(filtered);
     }
 
     public async Task FillFsmEntries()
@@ -105,14 +85,10 @@ public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelec
         if (!_manager.LoadMonoBehaviours(_fileInst))
         {
             await MessageBoxUtil.ShowDialog("Mono error", "Couldn't find game assemblies. Check your Managed or il2cpp_data folder?");
-            RequestClose?.Invoke(null);
             return;
         }
 
         // find script indices for monobehaviours we care about
-        // note: hashset required because for some reason the same
-        // monobehaviour can show up multiple times in one type tree
-        // bruh...
         var playMakerFsmSis = new HashSet<ushort>();
         var fsmTemplateSis = new HashSet<ushort>();
         var scriptInfos = AssetHelper.GetAssetsFileScriptInfos(_manager, _fileInst);
@@ -141,9 +117,9 @@ public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelec
 
             if (playMakerFsmSis.Contains(infoSi))
             {
-                var fsmName = GetFSMNameFast(_manager, _fileInst, info, afNamer);
+                var (fsmName, stateCount, transitionCount) = GetFSMDetailsExtended(_manager, _fileInst, info, afNamer);
                 var fsmPtr = new AssetPPtr(_fileInst.name, info.PathId);
-                _internalEntries.Add(new FsmSelectorListEntry(fsmName, fsmPtr));
+                _internalEntries.Add(new FsmSelectorListEntry(fsmName, fsmPtr, stateCount, transitionCount));
             }
         }
 
@@ -151,41 +127,41 @@ public partial class FsmSelectorViewModel : ViewModelBase, IDialogAware<FsmSelec
         FilterEntries(string.Empty);
     }
 
-    private static string GetFSMNameFast(AssetsManager manager, AssetsFileInstance fileInst, AssetFileInfo info, AfAssetNamer namer)
+    private static (string name, int stateCount, int transitionCount) GetFSMDetailsExtended(
+        AssetsManager manager, AssetsFileInstance fileInst, AssetFileInfo info, AfAssetNamer namer)
     {
         var fsmTemp = manager.GetTemplateBaseField(fileInst, info);
-
-        var nameIndex = fsmTemp.Children.FindIndex(monoTemp => monoTemp.Name == "name");
-        if (nameIndex != -1)
-        {
-            fsmTemp.Children.RemoveRange(nameIndex + 1, fsmTemp.Children.Count - (nameIndex + 1));
-        }
-
         AssetTypeValueField? monoBf;
         lock (fileInst.LockReader)
         {
             monoBf = fsmTemp.MakeValue(fileInst.file.Reader, info.GetAbsoluteByteOffset(fileInst.file));
         }
-
-        var fsmName = monoBf["fsm"]["name"].AsString;
+        var fsmData = monoBf["fsm"];
+        var fsmName = fsmData["name"].AsString;
         var goPtr = monoBf["m_GameObject"];
         var goName = namer.GetName(goPtr["m_FileID"].AsInt, goPtr["m_PathID"].AsLong);
-        return $"{goName} - {fsmName}";
+
+        // Use the robust parser for accurate counts
+        int stateCount = 0;
+        int transitionCount = 0;
+        try
+        {
+            var afField = new FSMExpress.Common.Assets.AfAssetField(fsmData, namer);
+            var fsm = new FSMExpress.PlayMaker.FsmPlaymaker(afField);
+            stateCount = fsm.States?.Count ?? 0;
+            transitionCount = fsm.States?.Sum(s => s.Transitions?.Count ?? 0) ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FSM count parse error: {ex.Message}");
+        }
+        return ($"{goName} - {fsmName}", stateCount, transitionCount);
     }
 
-    public void BtnOk_Click()
+    // Keep the legacy method for any code that might still be using it
+    private static string GetFSMNameFast(AssetsManager manager, AssetsFileInstance fileInst, AssetFileInfo info, AfAssetNamer namer)
     {
-        RequestClose?.Invoke(SelectedEntry);
+        var (name, _, _) = GetFSMDetailsExtended(manager, fileInst, info, namer);
+        return name;
     }
-
-    public void BtnCancel_Click()
-    {
-        RequestClose?.Invoke(null);
-    }
-}
-
-public class FsmSelectorListEntry(string name, AssetPPtr ptr)
-{
-    public string Name { get; } = name;
-    public AssetPPtr Ptr { get; } = ptr;
 }

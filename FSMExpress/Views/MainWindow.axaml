@@ -3,6 +3,7 @@
         xmlns:vm="using:FSMExpress.ViewModels"
         xmlns:can="using:FSMExpress.Controls.FsmCanvas"
         xmlns:sid="using:FSMExpress.Controls.Sidebar"
+        xmlns:controls="using:FSMExpress.Controls"
         xmlns:fcd="using:FSMExpress.Common.Document"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -77,9 +78,9 @@
     <Menu Grid.Row="0">
       <MenuItem Header="File">
         <MenuItem Header="Open" Command="{Binding FileOpen}" />
-        <MenuItem Header="Open scene list" />
-        <MenuItem Header="Open resources.assets" />
-        <MenuItem Header="Open last" IsEnabled="False" />
+        <MenuItem Header="Open scene list" Command="{Binding FileOpenSceneList}" IsEnabled="False"/>
+        <MenuItem Header="Open resources.assets" Command="{Binding FileOpenResourcesAssets}" IsEnabled="False"/>
+        <MenuItem Header="{Binding OpenLastMenuText}" Command="{Binding FileOpenLast}" IsEnabled="{Binding OpenLastEnabled}" />
       </MenuItem>
       <MenuItem Header="Config">
         <MenuItem Header="Set game path" Command="{Binding ConfigSetGamePath}" />
@@ -87,14 +88,19 @@
       <!--<MenuItem Header="Close tab"></MenuItem>
       <MenuItem Header="Close all tabs"></MenuItem>-->
     </Menu>
-    <Grid Grid.Row="1" ColumnDefinitions="*,4,300">
+    <Grid Grid.Row="1" ColumnDefinitions="250,4,*,4,300">
+      <controls:FsmListPanel
+        DataContext="{Binding FsmList}"
+        IsVisible="{Binding FsmList, Converter={x:Static ObjectConverters.IsNotNull}}"
+        Grid.Column="0" />
+      <GridSplitter Grid.Column="1" />
       <can:FsmCanvasControl
         Document="{Binding ActiveDocument}"
         SelectedNode="{Binding SelectedNode, Mode=TwoWay}"
-        Grid.Column="0" />
-      <GridSplitter Grid.Column="1" />
+        Grid.Column="2" />
+      <GridSplitter Grid.Column="3" />
       <!-- todo: move to own control -->
-      <ScrollViewer Grid.Column="2">
+      <ScrollViewer Grid.Column="4">
         <ItemsControl ItemsSource="{Binding SelectedNode.Fields}" />
       </ScrollViewer>
     </Grid>

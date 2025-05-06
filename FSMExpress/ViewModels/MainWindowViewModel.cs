@@ -1,99 +1,150 @@
 ﻿using AssetsTools.NET.Extra;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using FSMExpress.Common.Assets;
 using FSMExpress.Common.Document;
 using FSMExpress.Logic.Util;
 using FSMExpress.PlayMaker;
 using FSMExpress.Services;
-using FSMExpress.ViewModels.Dialogs;
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace FSMExpress.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly AssetsManager _manager = new();
+    private string? _lastOpenedFile;
+    private AssetsFileInstance? _currentFileInstance;
 
     [ObservableProperty]
     private FsmDocument? _activeDocument = null;
 
     [ObservableProperty]
-    public FsmDocumentNode? _selectedNode = null;
+    private FsmDocumentNode? _selectedNode = null;
+
+    [ObservableProperty]
+    private string _openLastMenuText = "Open Last";
+
+    [ObservableProperty]
+    private bool _openLastEnabled = false;
+
+    [ObservableProperty]
+    private FsmListPanelViewModel? _fsmList;
+
+    partial void OnFsmListChanged(FsmListPanelViewModel? value)
+    {
+        if (value != null)
+        {
+            value.PropertyChanged += FsmList_PropertyChanged;
+        }
+    }
+
+    private void FsmList_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(FsmListPanelViewModel.SelectedEntry) && 
+            sender is FsmListPanelViewModel vm &&
+            vm.SelectedEntry is FsmSelectorListEntry entry)
+        {
+            var fsmFileInst = _manager.FileLookup[entry.Ptr.FilePath];
+            var fsmBaseField = _manager.GetBaseField(fsmFileInst, entry.Ptr.PathId);
+            var fsmObject = new FsmPlaymaker(new AfAssetField(fsmBaseField["fsm"], new AfAssetNamer(_manager, fsmFileInst)));
+            ActiveDocument = fsmObject.MakeDocument();
+        }
+    }
 
     public MainWindowViewModel()
     {
         _manager.UseMonoTemplateFieldCache = true;
     }
 
-    public async void FileOpen()
+    private void UpdateOpenLastText()
     {
-        var storageProvider = StorageService.GetStorageProvider();
-        var dialogService = Ioc.Default.GetRequiredService<IDialogService>();
-        if (storageProvider is null || dialogService is null)
-            return;
+        OpenLastEnabled = !string.IsNullOrEmpty(_lastOpenedFile) && File.Exists(_lastOpenedFile);
+        OpenLastMenuText = _lastOpenedFile != null ? $"Open Last ({Path.GetFileName(_lastOpenedFile)})" : "Open Last";
+    }
 
-        var result = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Open a file",
-            FileTypeFilter = [StorageService.Any],
-        });
-
-        var fileNames = FileDialogUtils.GetOpenFileDialogFiles(result);
-        if (fileNames.Length == 0)
-            return;
-
-        var fileName = fileNames[0];
+    private async Task<bool> OpenFsmFile(string fileName)
+    {
         var fileInst = _manager.LoadAssetsFile(fileName);
         if (!_manager.LoadClassDatabase(fileInst))
         {
             await MessageBoxUtil.ShowDialog("Class Database failed to load", "Couldn't load class database class. Check if classdata.tpk exists?");
+            return false;
+        }
+
+        _currentFileInstance = fileInst;
+        FsmList = new FsmListPanelViewModel(_manager, fileInst);
+        await FsmList.FillFsmEntries();
+
+        _lastOpenedFile = fileName;
+        UpdateOpenLastText();
+        return true;
+    }
+
+    private IStorageProvider StorageProvider =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            ? desktop.MainWindow?.StorageProvider ?? throw new InvalidOperationException("Storage provider not available")
+            : throw new InvalidOperationException("Storage provider not available");
+
+    public async void FileOpen()
+    {
+        var file = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open assets file",
+            AllowMultiple = false
+        });
+
+        if (file.Count == 0)
+            return;
+
+        await OpenFsmFile(file[0].Path.LocalPath);
+    }
+
+    public async void FileOpenLast()
+    {
+        if (string.IsNullOrEmpty(_lastOpenedFile) || !File.Exists(_lastOpenedFile))
+        {
+            await MessageBoxUtil.ShowDialog("No previous file", "No previously opened file found.");
             return;
         }
 
-        var fsmChoice = await dialogService.ShowDialog(new FsmSelectorViewModel(_manager, fileInst));
-        if (fsmChoice == null)
-            return;
-
-        var fsmFileInst = _manager.FileLookup[fsmChoice.Ptr.FilePath];
-        var fsmBaseField = _manager.GetBaseField(fsmFileInst, fsmChoice.Ptr.PathId);
-        var fsmObject = new FsmPlaymaker(new AfAssetField(fsmBaseField["fsm"], new AfAssetNamer(_manager, fsmFileInst)));
-        var fsmDoc = fsmObject.MakeDocument();
-        ActiveDocument = fsmDoc;
+        await OpenFsmFile(_lastOpenedFile);
     }
 
+    // Disabled functionality placeholders
     public void FileOpenSceneList()
     {
-
+        // Not implemented
     }
 
     public void FileOpenFsmJson()
     {
-
+        // Not implemented
     }
 
     public void FileOpenResourcesAssets()
     {
-
-    }
-
-    public void FileOpenLast()
-    {
-
+        // Not implemented
     }
 
     public void ConfigSetGamePath()
     {
-
+        // Not implemented
     }
 
     public void CloseTabs()
     {
-
+        // Not implemented
     }
 
     public void CloseAllTabs()
     {
-
+        // Not implemented
     }
 }

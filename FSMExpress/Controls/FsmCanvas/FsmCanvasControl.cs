@@ -33,6 +33,13 @@ public class FsmCanvasControl : Grid
         set
         {
             SetAndRaise(DocumentProperty, ref _document, value);
+            
+            // Reset canvas position when new document is loaded
+            if (value != null)
+            {
+                _mt.Matrix = Matrix.Identity;
+            }
+            
             RebuildGraph();
         }
     }
