@@ -4,6 +4,8 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 using FSMExpress.Common.Document;
+using System;
+using Avalonia.Layout;
 
 namespace FSMExpress.Controls.FsmCanvas;
 public class FsmCanvasControl : Grid
@@ -16,16 +18,21 @@ public class FsmCanvasControl : Grid
 
     private readonly Canvas _can;
     private readonly MatrixTransform _mt;
+    private readonly TextBlock _instructionsTextBlock;
+    private readonly Border _instructionsBorder;
     private Point _lastPosition = new(0, 0);
     private bool _beingDragged = false;
 
     private FsmDocument? _document;
     private FsmDocumentNode? _selectedNode;
+    private bool _showInstructions = true;
 
     public static readonly DirectProperty<FsmCanvasControl, FsmDocument?> DocumentProperty =
         AvaloniaProperty.RegisterDirect<FsmCanvasControl, FsmDocument?>(nameof(Document), o => o.Document, (o, v) => o.Document = v);
     public static readonly DirectProperty<FsmCanvasControl, FsmDocumentNode?> SelectedNodeProperty =
         AvaloniaProperty.RegisterDirect<FsmCanvasControl, FsmDocumentNode?>(nameof(SelectedNode), o => o.SelectedNode, (o, v) => o.SelectedNode = v);
+    public static readonly DirectProperty<FsmCanvasControl, bool> ShowInstructionsProperty =
+        AvaloniaProperty.RegisterDirect<FsmCanvasControl, bool>(nameof(ShowInstructions), o => o.ShowInstructions, (o, v) => o.ShowInstructions = v);
 
     public FsmDocument? Document
     {
@@ -41,6 +48,7 @@ public class FsmCanvasControl : Grid
             }
             
             RebuildGraph();
+            UpdateInstructions();
         }
     }
 
@@ -56,6 +64,18 @@ public class FsmCanvasControl : Grid
 
             if (_selectedNode is not null)
                 _selectedNode.IsSelected = true;
+            
+            UpdateInstructions();
+        }
+    }
+
+    public bool ShowInstructions
+    {
+        get => _showInstructions;
+        set
+        {
+            SetAndRaise(ShowInstructionsProperty, ref _showInstructions, value);
+            _instructionsBorder.IsVisible = value;
         }
     }
 
@@ -67,10 +87,39 @@ public class FsmCanvasControl : Grid
             RenderTransform = _mt
         };
 
+        // Create instructions overlay
+        _instructionsTextBlock = new TextBlock
+        {
+            Text = "No document loaded. Open an FSM to get started.",
+            Foreground = new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)),
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Left,
+            Margin = new Thickness(10),
+            FontSize = 11
+        };
+
+        _instructionsBorder = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
+            CornerRadius = new CornerRadius(6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(10, 0, 0, 10),
+            Child = _instructionsTextBlock,
+            IsVisible = _showInstructions,
+            MaxWidth = 300
+        };
+
         Children.Add(_can);
+        Children.Add(_instructionsBorder);
         ClipToBounds = true;
 
         Background = new SolidColorBrush(BG_LIGHT_THEME_COLOR);
+
+        // Make control focusable so it can receive key events
+        Focusable = true;
 
         PointerPressed += MouseDownCanvas;
         PointerReleased += MouseUpCanvas;
@@ -78,8 +127,50 @@ public class FsmCanvasControl : Grid
         PointerWheelChanged += MouseScrollCanvas;
     }
 
+    // Toggles instruction visibility with a keyboard shortcut (H)
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        
+        if (e.Key == Key.H)
+        {
+            ShowInstructions = !ShowInstructions;
+            e.Handled = true;
+        }
+    }
+
+    private void UpdateInstructions()
+    {
+        string instructionText;
+
+        if (Document == null)
+        {
+            instructionText = "No document loaded.\nOpen an FSM to get started.";
+        }
+        else if (SelectedNode == null)
+        {
+            instructionText = "➤ Left click: Select a node\n" +
+                             "➤ Right click + drag: Pan canvas\n" +
+                             "➤ Scroll wheel: Zoom in/out\n" +
+                             "➤ Press H to hide/show instructions";
+        }
+        else
+        {
+            instructionText = $"Selected: {SelectedNode.Name}\n" +
+                             "➤ Left click on empty area: Deselect\n" +
+                             "➤ Right click + drag: Pan canvas\n" +
+                             "➤ Scroll wheel: Zoom in/out\n" +
+                             "➤ Press H to hide/show instructions";
+        }
+
+        _instructionsTextBlock.Text = instructionText;
+    }
+
     private void MouseDownCanvas(object? sender, PointerPressedEventArgs e)
     {
+        // Request focus to make keyboard shortcuts work
+        Focus();
+        
         var clickProps = e.GetCurrentPoint(this).Properties;
         if (clickProps.IsLeftButtonPressed)
         {

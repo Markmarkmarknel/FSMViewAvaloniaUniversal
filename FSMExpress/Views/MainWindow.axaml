@@ -81,15 +81,17 @@
         <MenuItem Header="Open scene list" Command="{Binding FileOpenSceneList}" IsEnabled="False"/>
         <MenuItem Header="Open resources.assets" Command="{Binding FileOpenResourcesAssets}" IsEnabled="False"/>
         <MenuItem Header="{Binding OpenLastMenuText}" Command="{Binding FileOpenLast}" IsEnabled="{Binding OpenLastEnabled}" />
+        <Separator />
+        <MenuItem Header="Close current file" Command="{Binding CloseTabs}" />
+        <MenuItem Header="Close all files" Command="{Binding CloseAllTabs}" />
       </MenuItem>
       <MenuItem Header="View">
         <MenuItem Header="Dark Mode" Command="{Binding ToggleDarkMode}" IsChecked="{Binding IsDarkMode}" />
+        <MenuItem Header="Show Instructions" Command="{Binding ToggleInstructions}" IsChecked="{Binding ShowInstructions}" />
       </MenuItem>
       <MenuItem Header="Config">
         <MenuItem Header="Set game path" Command="{Binding ConfigSetGamePath}" />
       </MenuItem>
-      <!--<MenuItem Header="Close tab"></MenuItem>
-      <MenuItem Header="Close all tabs"></MenuItem>-->
     </Menu>
     <Grid Grid.Row="1" ColumnDefinitions="250,4,*,4,300">
       <controls:FsmListPanel
@@ -100,6 +102,7 @@
       <can:FsmCanvasControl
         Document="{Binding ActiveDocument}"
         SelectedNode="{Binding SelectedNode, Mode=TwoWay}"
+        ShowInstructions="{Binding ShowInstructions}"
         Grid.Column="2" />
       <GridSplitter Grid.Column="3" />
       <!-- todo: move to own control -->
@@ -109,12 +112,13 @@
     </Grid>
     
     <!-- Status Bar -->
-    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Background="{DynamicResource ThemeControlLowBrush}">
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource ThemeControlLowBrush}">
       <ProgressBar Grid.Column="0" Width="100" Height="18" Margin="4,2,10,2"
                    IsVisible="{Binding IsLoading}" 
                    Minimum="0" Maximum="100"
                    Value="{Binding ProgressPercentage}"/>
       <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+      <TextBlock Grid.Column="2" Text="{Binding FileCountStatus}" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
     </Grid>
   </Grid>
 </Window>

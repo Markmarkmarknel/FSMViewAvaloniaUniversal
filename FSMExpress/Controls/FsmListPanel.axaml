@@ -7,14 +7,65 @@
              mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="450"
              x:Class="FSMExpress.Controls.FsmListPanel"
              x:DataType="vm:FsmListPanelViewModel">
+  <UserControl.Styles>
+    <!-- Add styles for the gear button -->
+    <Style Selector="Button.gearButton">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="16"/>
+    </Style>
+  </UserControl.Styles>
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4">
-      <TextBox Text="{Binding SearchText}" Watermark="Search FSMs..." />
+      <!-- Search input with gear button -->
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox Grid.Column="0" Text="{Binding SearchText}" Watermark="Search FSMs..." />
+        <Button Grid.Column="1" 
+                Classes="plain gearButton"
+                Content="⚙">
+          <Button.Flyout>
+            <Flyout Placement="Bottom">
+              <StackPanel MinWidth="200">
+                <TextBlock Text="Display Options" 
+                           FontWeight="Bold" 
+                           Margin="0,0,0,10"/>
+                
+                <!-- Column visibility toggles -->
+                <TextBlock Text="Visible Columns:" Margin="0,0,0,5"/>
+                <CheckBox Content="FSM Name" 
+                          IsChecked="{Binding ShowNameColumn}" 
+                          Margin="0,2"/>
+                <CheckBox Content="States Count" 
+                          IsChecked="{Binding ShowStatesColumn}" 
+                          Margin="0,2"/>
+                <CheckBox Content="Transitions Count" 
+                          IsChecked="{Binding ShowTransitionsColumn}" 
+                          Margin="0,2"/>
+                <CheckBox Content="File Name" 
+                          IsChecked="{Binding ShowFileNameColumn}" 
+                          Margin="0,2"/>
+                
+                <Separator Margin="0,10"/>
+                
+                <!-- Display density options -->
+                <TextBlock Text="Display Density:" Margin="0,5"/>
+                <ComboBox ItemsSource="{Binding DisplayDensityOptions}" 
+                          SelectedItem="{Binding SelectedDisplayDensity}"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,5"/>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </Grid>
       
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
         <TextBlock Grid.Row="0" Grid.Column="0" Text="Search Mode:" VerticalAlignment="Center" Margin="0,0,8,0"/>
         <ComboBox Grid.Row="0" Grid.Column="1" 
-                  ItemsSource="{Binding SearchModes}"
+                  ItemsSource="{Binding Source={x:Type vm:FsmListPanelViewModel+FsmSearchMode}, Converter={x:Static util:EnumHelper.GetValues}}"
                   SelectedItem="{Binding SearchMode}"
                   HorizontalAlignment="Stretch" />
       </Grid>
@@ -28,17 +79,71 @@
               CanUserResizeColumns="True"
               CanUserSortColumns="True"
               AutoGenerateColumns="False"
-              HeadersVisibility="Column">
+              HeadersVisibility="Column"
+              RowHeight="{Binding RowHeight}">
       <DataGrid.Columns>
-        <DataGridTextColumn Header="FSM Name" 
-                            Binding="{Binding Name}" 
-                            Width="*"/>
-        <DataGridTextColumn Header="States" 
-                            Binding="{Binding StateCount}" 
-                            Width="70"/>
-        <DataGridTextColumn Header="Transitions" 
-                            Binding="{Binding TransitionCount}" 
-                            Width="90"/>
+        <DataGridTemplateColumn Header="FSM Name" Width="*" IsVisible="{Binding ShowNameColumn}"
+                              SortMemberPath="Name">
+          <DataGridTemplateColumn.HeaderTemplate>
+            <DataTemplate>
+              <TextBlock Text="FSM Name"
+                        ToolTip.Tip="Full Name of the Finite State Machine"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.HeaderTemplate>
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="{Binding StatesColumnHeader}"
+                              Width="50"
+                              MinWidth="40"
+                              IsVisible="{Binding ShowStatesColumn}"
+                              SortMemberPath="StateCount">
+          <DataGridTemplateColumn.HeaderTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" ToolTip.Tip="States"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.HeaderTemplate>
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding StateCount}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="{Binding TransitionsColumnHeader}"
+                              Width="50"
+                              MinWidth="40"
+                              IsVisible="{Binding ShowTransitionsColumn}"
+                              SortMemberPath="TransitionCount">
+          <DataGridTemplateColumn.HeaderTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" ToolTip.Tip="Transitions"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.HeaderTemplate>
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding TransitionCount}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="{Binding FileNameColumnHeader}"
+                              Width="80"
+                              MinWidth="60"
+                              IsVisible="{Binding ShowFileNameColumn}"
+                              SortMemberPath="SourceFileName">
+          <DataGridTemplateColumn.HeaderTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" ToolTip.Tip="Source File"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.HeaderTemplate>
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding SourceFileName}" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
       </DataGrid.Columns>
     </DataGrid>
   </DockPanel>
