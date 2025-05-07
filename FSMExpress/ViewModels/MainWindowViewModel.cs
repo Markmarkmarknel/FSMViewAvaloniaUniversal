@@ -3,7 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using FSMExpress.Common.Assets;
 using FSMExpress.Common.Document;
 using FSMExpress.Logic.Util;
@@ -21,6 +23,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly AssetsManager _manager = new();
     private string? _lastOpenedFile;
     private AssetsFileInstance? _currentFileInstance;
+    private readonly ISettingsService _settingsService;
 
     [ObservableProperty]
     private FsmDocument? _activeDocument = null;
@@ -45,6 +48,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private int _progressPercentage = 0;
+    
+    [ObservableProperty]
+    private bool _isDarkMode = false;
 
     partial void OnFsmListChanged(FsmListPanelViewModel? value)
     {
@@ -70,6 +76,29 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _manager.UseMonoTemplateFieldCache = true;
+        
+        // Get the settings service from the dependency injection container
+        _settingsService = Ioc.Default.GetService<ISettingsService>() ?? new SettingsService();
+        
+        // Load dark mode setting from settings service
+        IsDarkMode = _settingsService.IsDarkMode;
+        
+        // Apply the theme based on settings
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeVariant = IsDarkMode ? ThemeVariant.Dark : ThemeVariant.Light;
+        }
+    }
+
+    partial void OnIsDarkModeChanged(bool value)
+    {
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeVariant = value ? ThemeVariant.Dark : ThemeVariant.Light;
+        }
+        
+        // Save the dark mode setting
+        _settingsService.IsDarkMode = value;
     }
 
     private void UpdateOpenLastText()
@@ -170,6 +199,11 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         await OpenFsmFile(_lastOpenedFile);
+    }
+
+    public void ToggleDarkMode()
+    {
+        IsDarkMode = !IsDarkMode;
     }
 
     // Disabled functionality placeholders

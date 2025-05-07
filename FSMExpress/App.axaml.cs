@@ -24,28 +24,26 @@ public partial class App : Application
             // Line below is needed to remove Avalonia data validation.
             // Without this line you will get duplicate validations from both Avalonia and CT
             BindingPlugins.DataValidators.RemoveAt(0);
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = new MainWindowViewModel(),
-            };
-
-            var provider = ConfigureServices(desktop.MainWindow);
+            
+            // Configure services before creating the MainWindowViewModel
+            var viewLocator = new ViewLocator();
+            var services = new ServiceCollection();
+            
+            // Create window first so we can pass it to the dialog service
+            desktop.MainWindow = new MainWindow();
+            
+            // Register services
+            services.AddSingleton<IDialogService>(new DialogService(desktop.MainWindow, viewLocator));
+            services.AddSingleton<ISettingsService, SettingsService>();
+            
+            // Build and configure the service provider
+            var provider = services.BuildServiceProvider();
             Ioc.Default.ConfigureServices(provider);
+            
+            // Create the view model after IoC is configured
+            desktop.MainWindow.DataContext = new MainWindowViewModel();
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    private static ServiceProvider ConfigureServices(Window? mainWindow)
-    {
-        var services = new ServiceCollection();
-
-        var viewLocator = new ViewLocator();
-        if (mainWindow != null)
-            services.AddSingleton<IDialogService>(new DialogService(mainWindow, viewLocator));
-        else
-            services.AddSingleton<IDialogService, DummyDialogService>();
-
-        return services.BuildServiceProvider();
     }
 }

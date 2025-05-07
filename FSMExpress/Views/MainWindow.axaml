@@ -82,6 +82,9 @@
         <MenuItem Header="Open resources.assets" Command="{Binding FileOpenResourcesAssets}" IsEnabled="False"/>
         <MenuItem Header="{Binding OpenLastMenuText}" Command="{Binding FileOpenLast}" IsEnabled="{Binding OpenLastEnabled}" />
       </MenuItem>
+      <MenuItem Header="View">
+        <MenuItem Header="Dark Mode" Command="{Binding ToggleDarkMode}" IsChecked="{Binding IsDarkMode}" />
+      </MenuItem>
       <MenuItem Header="Config">
         <MenuItem Header="Set game path" Command="{Binding ConfigSetGamePath}" />
       </MenuItem>
