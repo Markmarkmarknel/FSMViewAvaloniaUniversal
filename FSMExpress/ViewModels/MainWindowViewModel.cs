@@ -37,6 +37,15 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private FsmListPanelViewModel? _fsmList;
 
+    [ObservableProperty]
+    private bool _isLoading = false;
+
+    [ObservableProperty]
+    private string _statusMessage = "Ready";
+
+    [ObservableProperty]
+    private int _progressPercentage = 0;
+
     partial void OnFsmListChanged(FsmListPanelViewModel? value)
     {
         if (value != null)
@@ -71,20 +80,66 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task<bool> OpenFsmFile(string fileName)
     {
-        var fileInst = _manager.LoadAssetsFile(fileName);
-        if (!_manager.LoadClassDatabase(fileInst))
+        try
         {
-            await MessageBoxUtil.ShowDialog("Class Database failed to load", "Couldn't load class database class. Check if classdata.tpk exists?");
+            IsLoading = true;
+            StatusMessage = $"Loading {Path.GetFileName(fileName)}...";
+            
+            // Allow UI to update before starting the heavy operation
+            await Task.Delay(10);
+            
+            // Load the file on a background thread
+            var fileInst = await Task.Run(() => _manager.LoadAssetsFile(fileName));
+            
+            if (!_manager.LoadClassDatabase(fileInst))
+            {
+                await MessageBoxUtil.ShowDialog("Class Database failed to load", "Couldn't load class database class. Check if classdata.tpk exists?");
+                return false;
+            }
+
+            _currentFileInstance = fileInst;
+            
+            StatusMessage = "Processing FSM entries...";
+            FsmList = new FsmListPanelViewModel(_manager, fileInst);
+            
+            // Subscribe to progress updates
+            FsmList.ProgressChanged += OnFsmLoadProgressChanged;
+            
+            // Allow UI to update again after setting the status message
+            await Task.Delay(10);
+            
+            await FsmList.FillFsmEntries();
+
+            _lastOpenedFile = fileName;
+            UpdateOpenLastText();
+            
+            StatusMessage = $"Loaded {Path.GetFileName(fileName)}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error: {ex.Message}";
             return false;
         }
+        finally
+        {
+            IsLoading = false;
+            
+            // Unsubscribe from progress updates
+            if (FsmList != null)
+            {
+                FsmList.ProgressChanged -= OnFsmLoadProgressChanged;
+            }
+        }
+    }
 
-        _currentFileInstance = fileInst;
-        FsmList = new FsmListPanelViewModel(_manager, fileInst);
-        await FsmList.FillFsmEntries();
-
-        _lastOpenedFile = fileName;
-        UpdateOpenLastText();
-        return true;
+    private void OnFsmLoadProgressChanged(string message, int processed, int total)
+    {
+        // Calculate percentage
+        ProgressPercentage = total > 0 ? (int)((processed / (double)total) * 100) : 0;
+        
+        // Update status message with progress information
+        StatusMessage = $"{message}: {processed}/{total} ({ProgressPercentage}%)";
     }
 
     private IStorageProvider StorageProvider =>

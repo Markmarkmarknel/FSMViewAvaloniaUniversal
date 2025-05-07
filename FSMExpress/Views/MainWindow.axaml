@@ -74,7 +74,7 @@
     </DataTemplate>
   </Window.DataTemplates>
   
-  <Grid RowDefinitions="21,*">
+  <Grid RowDefinitions="21,*,22">
     <Menu Grid.Row="0">
       <MenuItem Header="File">
         <MenuItem Header="Open" Command="{Binding FileOpen}" />
@@ -103,6 +103,15 @@
       <ScrollViewer Grid.Column="4">
         <ItemsControl ItemsSource="{Binding SelectedNode.Fields}" />
       </ScrollViewer>
+    </Grid>
+    
+    <!-- Status Bar -->
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Background="{DynamicResource ThemeControlLowBrush}">
+      <ProgressBar Grid.Column="0" Width="100" Height="18" Margin="4,2,10,2"
+                   IsVisible="{Binding IsLoading}" 
+                   Minimum="0" Maximum="100"
+                   Value="{Binding ProgressPercentage}"/>
+      <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center" Margin="4,0,0,0"/>
     </Grid>
   </Grid>
 </Window>

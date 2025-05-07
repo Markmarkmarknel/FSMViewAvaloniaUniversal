@@ -51,6 +51,10 @@ public partial class FsmListPanelViewModel : ViewModelBase
         _searchModes = new ObservableCollection<FsmSearchMode>(Enum.GetValues<FsmSearchMode>());
     }
 
+    // Delegate for progress reporting
+    public delegate void ProgressReportHandler(string message, int processed, int total);
+    public event ProgressReportHandler? ProgressChanged;
+
     // Handlers for property changes
     partial void OnSearchTextChanged(string value) => _searchDb(value);
     partial void OnSearchModeChanged(FsmSearchMode value) => _searchDb(SearchText);
@@ -82,46 +86,88 @@ public partial class FsmListPanelViewModel : ViewModelBase
     public async Task FillFsmEntries()
     {
         SearchText = "Loading...";
+        _internalEntries.Clear();
+        
         if (!_manager.LoadMonoBehaviours(_fileInst))
         {
             await MessageBoxUtil.ShowDialog("Mono error", "Couldn't find game assemblies. Check your Managed or il2cpp_data folder?");
             return;
         }
 
-        // find script indices for monobehaviours we care about
-        var playMakerFsmSis = new HashSet<ushort>();
-        var fsmTemplateSis = new HashSet<ushort>();
-        var scriptInfos = AssetHelper.GetAssetsFileScriptInfos(_manager, _fileInst);
-        foreach (var scriptInfo in scriptInfos)
+        // Get script indices on a background thread
+        var (playMakerFsmSis, fsmTemplateSis) = await Task.Run(() => 
         {
-            var scriptInfoRef = scriptInfo.Value;
-            var asmName = scriptInfoRef.AsmName;
-            var nameSpace = scriptInfoRef.Namespace;
-            var className = scriptInfoRef.ClassName;
-            if (asmName == "PlayMaker.dll" && nameSpace == "" && className == "PlayMakerFSM")
-                playMakerFsmSis.Add((ushort)scriptInfo.Key);
-            if (asmName == "PlayMaker.dll" && nameSpace == "" && className == "FsmTemplate")
-                fsmTemplateSis.Add((ushort)scriptInfo.Key);
-        }
-
-        var file = _fileInst.file;
-        var afNamer = new AfAssetNamer(_manager, _fileInst);
-        foreach (var info in file.AssetInfos)
-        {
-            if (info.TypeId != (int)AssetClassID.MonoBehaviour)
-                continue;
-
-            var infoSi = info.GetScriptIndex(_fileInst.file);
-            if (infoSi == ushort.MaxValue)
-                continue;
-
-            if (playMakerFsmSis.Contains(infoSi))
+            var pFsmSis = new HashSet<ushort>();
+            var fTempSis = new HashSet<ushort>();
+            var scriptInfos = AssetHelper.GetAssetsFileScriptInfos(_manager, _fileInst);
+            foreach (var scriptInfo in scriptInfos)
             {
-                var (fsmName, stateCount, transitionCount) = GetFSMDetailsExtended(_manager, _fileInst, info, afNamer);
-                var fsmPtr = new AssetPPtr(_fileInst.name, info.PathId);
-                _internalEntries.Add(new FsmSelectorListEntry(fsmName, fsmPtr, stateCount, transitionCount));
+                var scriptInfoRef = scriptInfo.Value;
+                var asmName = scriptInfoRef.AsmName;
+                var nameSpace = scriptInfoRef.Namespace;
+                var className = scriptInfoRef.ClassName;
+                if (asmName == "PlayMaker.dll" && nameSpace == "" && className == "PlayMakerFSM")
+                    pFsmSis.Add((ushort)scriptInfo.Key);
+                if (asmName == "PlayMaker.dll" && nameSpace == "" && className == "FsmTemplate")
+                    fTempSis.Add((ushort)scriptInfo.Key);
             }
-        }
+            return (pFsmSis, fTempSis);
+        });
+
+        // First count total FSMs to process
+        int totalFsms = await Task.Run(() => 
+        {
+            int count = 0;
+            var file = _fileInst.file;
+            foreach (var info in file.AssetInfos)
+            {
+                if (info.TypeId != (int)AssetClassID.MonoBehaviour)
+                    continue;
+
+                var infoSi = info.GetScriptIndex(_fileInst.file);
+                if (infoSi == ushort.MaxValue)
+                    continue;
+
+                if (playMakerFsmSis.Contains(infoSi))
+                {
+                    count++;
+                }
+            }
+            return count;
+        });
+
+        ProgressChanged?.Invoke("Processing FSMs", 0, totalFsms);
+
+        // Process asset infos on a background thread with progress reporting
+        await Task.Run(() => 
+        {
+            var file = _fileInst.file;
+            var afNamer = new AfAssetNamer(_manager, _fileInst);
+            int processed = 0;
+            
+            foreach (var info in file.AssetInfos)
+            {
+                if (info.TypeId != (int)AssetClassID.MonoBehaviour)
+                    continue;
+
+                var infoSi = info.GetScriptIndex(_fileInst.file);
+                if (infoSi == ushort.MaxValue)
+                    continue;
+
+                if (playMakerFsmSis.Contains(infoSi))
+                {
+                    var (fsmName, stateCount, transitionCount) = GetFSMDetailsExtended(_manager, _fileInst, info, afNamer);
+                    var fsmPtr = new AssetPPtr(_fileInst.name, info.PathId);
+                    _internalEntries.Add(new FsmSelectorListEntry(fsmName, fsmPtr, stateCount, transitionCount));
+                    
+                    processed++;
+                    if (processed % 10 == 0 || processed == totalFsms) // Report every 10 FSMs or on completion
+                    {
+                        ProgressChanged?.Invoke("Processing FSMs", processed, totalFsms);
+                    }
+                }
+            }
+        });
 
         SearchText = "";
         FilterEntries(string.Empty);
